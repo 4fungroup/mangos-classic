@@ -1346,6 +1346,16 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
                     unitTarget->CastSpell(nullptr, 3617, TRIGGERED_OLD_TRIGGERED); // guessed suicide spell
                     return;
                 }
+                case 28961:                                 // Summon Corpse Scarabs (10)
+                {
+                    if (unitTarget->isAlive())
+                        return;
+
+                    unitTarget->CastSpell(unitTarget, 28864, TRIGGERED_OLD_TRIGGERED);  // Actual summoning spell
+                    ((Creature*)unitTarget)->ForcedDespawn(2000);
+
+                    return;
+                }
                 case 29682:                                 // Call All Zombie Chow
                 {
                     if (unitTarget->isAlive())
@@ -4529,6 +4539,19 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                     unitTarget->CastSpell(unitTarget, 28561, TRIGGERED_OLD_TRIGGERED, nullptr, nullptr, m_caster->GetObjectGuid());
                     return;
                 }
+                case 28732:                                 // Widow Embrace
+                {
+                    m_caster->CastSpell(nullptr, 28748, TRIGGERED_OLD_TRIGGERED);       // Self suicide
+                    return;
+                }
+                case 29379:                                 // Despawn Crypt Guards
+                case 30134:                                 // Despawn Boss Adds
+                case 30228:                                 // Despawn Summons
+                {
+                    if (unitTarget)
+                        ((Creature*)unitTarget)->ForcedDespawn();
+                    return;
+                }
                 case 30132:                                 // Despawn Ice Block
                 {
                     if (unitTarget && unitTarget->GetTypeId() == TYPEID_PLAYER)
@@ -5747,7 +5770,7 @@ void Spell::EffectTransmitted(SpellEffectIndex eff_idx)
             // calculate angle variation for roughly equal dimensions of target area
             float max_angle = (max_dis - min_dis) / (max_dis + m_caster->GetObjectBoundingRadius());
             float angle_offset = max_angle * (rand_norm_f() - 0.5f);
-            m_caster->GetNearPoint2D(fx, fy, dis + m_caster->GetObjectBoundingRadius(), m_caster->GetOrientation() + angle_offset);
+            m_caster->GetNearPoint2d(fx, fy, dis + m_caster->GetObjectBoundingRadius(), m_caster->GetOrientation() + angle_offset);
 
             GridMapLiquidData liqData;
             if (!m_caster->GetTerrain()->IsInWater(fx, fy, m_caster->GetPositionZ() + 1.f, &liqData))

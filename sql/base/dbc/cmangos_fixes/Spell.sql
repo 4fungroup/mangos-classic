@@ -67,3 +67,14 @@ UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(14156,14160);
 -- Mangletooth - These spells need to ignore LOS
 UPDATE spell_template SET AttributesEx2 = AttributesEx2|4 WHERE id IN (7764, 16618, 10767, 16610, 16612, 17013);
 
+-- Fix radius of summoning spells for Corpse Scarabs used for Anub'Rekhan
+UPDATE spell_template SET EffectRadiusIndex1=16 WHERE id IN (28864, 29105);
+
+-- Fix radius of Consumption spell for Void Zone in Four Horsemen (use same value than TBC DBCs)
+UPDATE spell_template SET EffectRadiusIndex1=7 WHERE id=28865;
+
+-- Fix radius of Summon Spore spell in Loatheb (use same value than WotLK DBCs)
+UPDATE spell_template SET EffectRadiusIndex1=23 WHERE id=29234;
+
+-- Remove incorrect spell attribute for spell 30122 (Plague Cloud) used in Heigan the Unclean encounter
+UPDATE spell_template SET AttributesEx=(AttributesEx&~0x00000040) WHERE id=30122;

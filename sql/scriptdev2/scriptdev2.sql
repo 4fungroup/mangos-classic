@@ -51,6 +51,7 @@ INSERT INTO scripted_areatrigger VALUES
 (4052,'at_temple_ahnqiraj'),
 (4112,'at_naxxramas'),
 (4113,'at_naxxramas'),
+(4115,'at_naxxramas'),
 (4156,'at_naxxramas');
 
 /* BATTLEGROUNDS */
@@ -2374,7 +2375,7 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,commen
 (-1533045,'Come, Zeliek, do not drive them out. Not before we\'ve had our fun.',8896,6,0,0,'blaumeux SAY_BLAU_TAUNT1'),
 (-1533046,'I do hope they stay alive long enough for me to... introduce myself.',8897,6,0,0,'blaumeux SAY_BLAU_TAUNT2'),
 (-1533047,'The first kill goes to me! Anyone care to wager?',8898,6,0,0,'blaumeux SAY_BLAU_TAUNT3'),
-(-1533048,'Your life is mine!',8895,1,0,0,'blaumeux SAY_BLAU_SPECIAL'),
+(-1533048,'Your life is mine!',8895,0,0,0,'blaumeux SAY_BLAU_SPECIAL'),
 (-1533049,'Who\'s next?',8894,0,0,0,'blaumeux SAY_BLAU_SLAY'),
 (-1533050,'Tou... che!',8893,0,0,0,'blaumeux SAY_BLAU_DEATH'),
 
@@ -2451,7 +2452,7 @@ INSERT INTO script_texts (entry,content_default,sound,type,language,emote,commen
 (-1533115,'Soon... the world will tremble!',8832,1,0,0,'heigan SAY_TAUNT3'),
 (-1533116,'The end is upon you.',8833,1,0,0,'heigan SAY_CHANNELING'),
 (-1533117,'Hungry worms will feast on your rotten flesh!',8834,1,0,0,'heigan SAY_TAUNT4'),
-(-1533118,'Noo... o...',8828,1,0,0,'heigan SAY_DEATH'),
+(-1533118,'%s takes is last breath.',0,2,0,0,'heigan EMOTE_DEATH'),
 
 (-1533119,'%s spots a nearby zombie to devour!',0,2,0,0,'gluth EMOTE_ZOMBIE'),
 
