@@ -63,6 +63,10 @@ UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(12289,12668,23695
 UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(16850,16923,16924);
 -- Ruthlessness - talent aura which is meant to be cast on self
 UPDATE spell_template SET EffectImplicitTargetA1=1 WHERE Id IN(14156,14160);
+-- get rid of targeting info for indices with no effect - core optimization
+UPDATE spell_template SET EffectImplicitTargetA1=0,EffectImplicitTargetB1=0 WHERE Effect1=0;
+UPDATE spell_template SET EffectImplicitTargetA2=0,EffectImplicitTargetB2=0 WHERE Effect2=0;
+UPDATE spell_template SET EffectImplicitTargetA3=0,EffectImplicitTargetB3=0 WHERE Effect3=0;
 
 -- Mangletooth - These spells need to ignore LOS
 UPDATE spell_template SET AttributesEx2 = AttributesEx2|4 WHERE id IN (7764, 16618, 10767, 16610, 16612, 17013);
@@ -78,3 +82,46 @@ UPDATE spell_template SET EffectRadiusIndex1=23 WHERE id=29234;
 
 -- Remove incorrect spell attribute for spell 30122 (Plague Cloud) used in Heigan the Unclean encounter
 UPDATE spell_template SET AttributesEx=(AttributesEx&~0x00000040) WHERE id=30122;
+
+-- Custom spells to be used with .modify commands. These spell ids are free in all expansions.
+INSERT INTO `spell_template` (`Id`, `Attributes`, `CastingTimeIndex`, `ProcChance`, `SpellLevel`, `DurationIndex`, `EquippedItemClass`, `Effect1`, `EffectApplyAuraName1`, `EffectMiscValue1`, `SpellName`) VALUES
+(15170, 64, 1, 101, 1, 21, -1, 6, 22, 1, 'Custom QA Mod Armor'),
+(15171, 64, 1, 101, 1, 21, -1, 6, 22, 2, 'Custom QA Mod Resist Holy'),
+(15172, 64, 1, 101, 1, 21, -1, 6, 22, 4, 'Custom QA Mod Resist Fire'),
+(15173, 64, 1, 101, 1, 21, -1, 6, 22, 8, 'Custom QA Mod Resist Nature'),
+(15174, 64, 1, 101, 1, 21, -1, 6, 22, 16, 'Custom QA Mod Resist Frost'),
+(15175, 64, 1, 101, 1, 21, -1, 6, 22, 32, 'Custom QA Mod Resist Shadow'),
+(15176, 64, 1, 101, 1, 21, -1, 6, 22, 64, 'Custom QA Mod Resist Arcane'),
+(15177, 64, 1, 101, 1, 21, -1, 6, 99, 0, 'Custom QA Mod Melee AP'),
+(15178, 64, 1, 101, 1, 21, -1, 6, 124, 0, 'Custom QA Mod Ranged AP'),
+(15179, 64, 1, 101, 1, 21, -1, 6, 52, 0, 'Custom QA Mod Melee Crit'),
+(15180, 64, 1, 101, 1, 21, -1, 6, 57, 0, 'Custom QA Mod Spell Crit'),
+(15181, 64, 1, 101, 1, 21, -1, 6, 138, 0, 'Custom QA Mod Melee Haste'),
+(15182, 64, 1, 101, 1, 21, -1, 6, 140, 0, 'Custom QA Mod Ranged Haste'),
+(15183, 64, 1, 101, 1, 21, -1, 6, 65, 0, 'Custom QA Mod Spell Haste'),
+(15184, 64, 1, 101, 1, 21, -1, 6, 47, 0, 'Custom QA Mod Parry Chance'),
+(15185, 64, 1, 101, 1, 21, -1, 6, 49, 0, 'Custom QA Mod Dodge Chance'),
+(15186, 64, 1, 101, 1, 21, -1, 6, 51, 0, 'Custom QA Mod Block Chance');
+
+-- Razorgore - Destroy Egg - should not be affected by pushback and interrupt on damage
+UPDATE spell_template SET InterruptFlags=InterruptFlags&~0x12 WHERE Id IN(19873);
+
+-- AQ40 - Huhuran - Wyvern Sting/Poison Bolt Volley - Max 10 targets
+UPDATE spell_template SET MaxAffectedTargets=10 WHERE Id IN(26180);
+UPDATE spell_template SET MaxAffectedTargets=15 WHERE Id IN(26052);
+
+-- Onyxia - Wing buffet is interruptible by things but shouldnt
+UPDATE spell_template SET InterruptFlags=0 WHERE Id IN(18500);
+
+-- AQ40 - Ouro - Sweep is interruptible by things but shouldnt
+UPDATE spell_template SET InterruptFlags=0 WHERE Id IN(26103);
+
+-- Fix Felguard Destroyer 18977 Sweeping Charge Id: 96 (SPELL_EFFECT_CHARGE) not working correctly changing to Id: 149 (SPELL_EFFECT_CHARGE_DEST)
+UPDATE `spell_template` SET `Effect1` = 149 WHERE `Id` IN (33971);
+
+-- Nether Beam - Netherspite - restricted to one target
+UPDATE spell_template SET MaxAffectedTargets=1 WHERE Id IN(30469);
+
+-- Fix duration of spell 28561 (Summon Blizzard): NPC should despawn after 30 seconds, not 5 minutes
+UPDATE spell_template SET DurationIndex=9 WHERE id=28561;
+

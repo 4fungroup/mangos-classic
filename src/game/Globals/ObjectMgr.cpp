@@ -1065,17 +1065,12 @@ void ObjectMgr::LoadCreatures()
             CreatureConditionalSpawn const* cSpawn = GetCreatureConditionalSpawn(guid);
             if (!cSpawn)
             {
-                auto spawnEntriesMap = sObjectMgr.GetCreatureSpawnEntry();
-                auto itr = spawnEntriesMap.find(guid);
-                if (itr == spawnEntriesMap.end())
+                if (uint32 randomEntry = sObjectMgr.GetRandomEntry(guid))
+                    entry = randomEntry;
+                else
                 {
                     sLog.outErrorDb("Table `creature` has creature (GUID: %u) with 0 id and no records in creature_conditional_spawn/creature_spawn_entry, skipped.", guid);
                     continue;
-                }
-                else
-                {
-                    auto& spawnList = (*itr).second;
-                    entry = spawnList[irand(0, spawnList.size() - 1)];
                 }
             }
             else
@@ -4603,7 +4598,7 @@ GossipText const* ObjectMgr::GetGossipText(uint32 Text_ID) const
 
 void ObjectMgr::LoadGossipText()
 {
-    QueryResult* result = WorldDatabase.Query("SELECT * FROM npc_text");
+    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT * FROM npc_text"));
 
     int count = 0;
     if (!result)
@@ -4616,7 +4611,7 @@ void ObjectMgr::LoadGossipText()
         return;
     }
 
-    BarGoLink bar(result->GetRowCount());
+    BarGoLink bar1(result->GetRowCount());
 
     do
     {
@@ -4625,7 +4620,7 @@ void ObjectMgr::LoadGossipText()
 
         Field* fields = result->Fetch();
 
-        bar.step();
+        bar1.step();
 
         uint32 Text_ID    = fields[cic++].GetUInt32();
         if (!Text_ID)
@@ -4655,7 +4650,72 @@ void ObjectMgr::LoadGossipText()
 
     sLog.outString(">> Loaded %u npc texts", count);
     sLog.outString();
-    delete result;
+
+    result.reset(WorldDatabase.Query("SELECT Id,Prob0,Prob1,Prob2,Prob3,Prob4,Prob5,Prob6,Prob7,BroadcastTextId1,BroadcastTextId2,BroadcastTextId3,BroadcastTextId4,BroadcastTextId5,BroadcastTextId6,BroadcastTextId7 FROM npc_text_broadcast_text"));
+    
+    count = 0;
+    if (!result)
+    {
+        BarGoLink bar(1);
+        bar.step();
+
+        sLog.outString(">> Loaded %u npc_text_broadcast_text", count);
+        sLog.outString();
+        return;
+    }
+
+    BarGoLink bar2(result->GetRowCount());
+
+    do
+    {
+        ++count;
+
+        Field* fields = result->Fetch();
+
+        bar2.step();
+
+        uint32 id = fields[0].GetUInt32();
+        if (!id)
+        {
+            sLog.outErrorDb("Table `npc_text_broadcast_text` has record wit reserved id 0, ignore.");
+            continue;
+        }
+        GossipText& gText = mGossipText[id];
+        if (!gText.Options[0].Text_0.empty() || !gText.Options[0].Text_1.empty())
+            sLog.outErrorDb("Table `npc_text_broadcast_text` has record in `npc_text` as well. Overwriting.");
+
+        for (uint32 i = 0; i < MAX_GOSSIP_TEXT_OPTIONS; ++i)
+        {
+            auto& option = gText.Options[i];
+            option.Probability = fields[1 + i].GetFloat();
+            uint32 broadcastTextId = fields[1 + MAX_GOSSIP_TEXT_OPTIONS + i].GetUInt32();
+            if (BroadcastText const* bct = sObjectMgr.GetBroadcastText(broadcastTextId))
+            {
+                option.Text_0 = "";
+                option.Text_1 = "";
+                option.Language = bct->languageId;
+                for (int j = 0; j < 3; ++j)
+                {
+                    option.Emotes[j]._Delay = bct->emoteDelays[j];
+                    option.Emotes[j]._Emote = bct->emoteIds[j];
+                }
+                option.broadcastTextId = broadcastTextId;
+            }
+            else
+            {
+                option.Text_0 = "";
+                option.Text_1 = "";
+                option.Language = 0;
+                for (int j = 0; j < 3; ++j)
+                {
+                    option.Emotes[j]._Delay = 0;
+                    option.Emotes[j]._Emote = 0;
+                }
+                option.broadcastTextId = 0;
+            }
+        }
+    }
+    while (result->NextRow());
 }
 
 void ObjectMgr::LoadGossipTextLocales()
@@ -5491,7 +5551,7 @@ void ObjectMgr::LoadGraveyardZones()
         uint32 zoneId = fields[1].GetUInt32();
         uint32 team   = fields[2].GetUInt32();
 
-        WorldSafeLocsEntry const* entry = sWorldSafeLocsStore.LookupEntry(safeLocId);
+        WorldSafeLocsEntry const* entry = sWorldSafeLocsStore.LookupEntry<WorldSafeLocsEntry>(safeLocId);
         if (!entry)
         {
             sLog.outErrorDb("Table `game_graveyard_zone` has record for not existing graveyard (WorldSafeLocs.dbc id) %u, skipped.", safeLocId);
@@ -5568,7 +5628,7 @@ WorldSafeLocsEntry const* ObjectMgr::GetClosestGraveYard(float x, float y, float
         GraveYardData const& data = itr->second;
 
         // Checked on load
-        WorldSafeLocsEntry const* entry = sWorldSafeLocsStore.LookupEntry(data.safeLocId);
+        WorldSafeLocsEntry const* entry = sWorldSafeLocsStore.LookupEntry<WorldSafeLocsEntry>(data.safeLocId);
 
         // skip enemy faction graveyard
         // team == TEAM_BOTH_ALLOWED case can be at call from .neargrave
@@ -5692,6 +5752,12 @@ void ObjectMgr::SetGraveYardLinkTeam(uint32 id, uint32 zoneId, Team team)
     // Link expected but not exist.
     sLog.outErrorDb("ObjectMgr::SetGraveYardLinkTeam called for safeLoc %u, zoneId %u, but no graveyard link for this found in database.", id, zoneId);
     AddGraveYardLink(id, zoneId, team);                     // Add to prevent further error message and correct mechanismn
+}
+
+void ObjectMgr::LoadWorldSafeLocs() const
+{
+    sWorldSafeLocsStore.Load(true);
+    sLog.outString(">> Loaded %u world safe locs", sWorldSafeLocsStore.GetRecordCount());
 }
 
 void ObjectMgr::LoadAreaTriggerTeleports()
@@ -6896,6 +6962,104 @@ void ObjectMgr::CheckSpellCones()
     }
 }
 
+void ObjectMgr::LoadBroadcastText()
+{
+    uint32 count = 0;
+
+    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT Id, Text, Text1, LanguageID, EmoteID1, EmoteID2, EmoteID3, EmoteDelay1, EmoteDelay2, EmoteDelay3 FROM broadcast_text"));
+
+    if (!result)
+    {
+        BarGoLink bar(1);
+
+        bar.step();
+
+        sLog.outString();
+        sLog.outErrorDb(">> Loaded 0 quest relations from %s. DB table `%s` is empty.", "broadcast_text", "broadcast_text");
+        return;
+    }
+
+
+    BarGoLink bar(result->GetRowCount());
+
+    do
+    {
+        Field* fields = result->Fetch();
+        bar.step();
+
+        uint32 id = fields[0].GetUInt32();
+
+        BroadcastText& bct = m_broadcastTextMap[id];
+
+        bct.maleText[DEFAULT_LOCALE] = fields[1].GetCppString();
+        bct.femaleText[DEFAULT_LOCALE] = fields[2].GetCppString();
+        bct.languageId = Language(fields[3].GetUInt32());
+        bct.emoteIds[0] = fields[4].GetUInt32();
+        bct.emoteIds[1] = fields[5].GetUInt32();
+        bct.emoteIds[2] = fields[6].GetUInt32();
+        bct.emoteDelays[0] = fields[7].GetUInt32();
+        bct.emoteDelays[1] = fields[8].GetUInt32();
+        bct.emoteDelays[2] = fields[9].GetUInt32();
+
+        ++count;
+    } while (result->NextRow());
+
+    sLog.outString(">> Loaded %u texts from %s", count, "broadcast_text");
+    sLog.outString();
+}
+
+void ObjectMgr::LoadBroadcastTextLocales()
+{
+    uint32 count = 0;
+
+    std::unique_ptr<QueryResult> result(WorldDatabase.Query("SELECT Id, Locale, Text_lang, Text1_lang FROM broadcast_text_locale"));
+
+    if (!result)
+    {
+        BarGoLink bar(1);
+
+        bar.step();
+
+        sLog.outErrorDb(">> Loaded 0 quest relations from broadcast_text_locales. DB table `broadcast_text_locale` is empty.");
+        return;
+    }
+
+    BarGoLink bar(result->GetRowCount());
+
+    do
+    {
+        Field* fields = result->Fetch();
+        bar.step();
+
+        uint32 id = fields[0].GetUInt32();
+
+        BroadcastText& bct = m_broadcastTextMap[id];
+
+        std::string localeString = fields[1].GetCppString();
+        std::string maleText = fields[2].GetCppString();
+        std::string femaleText = fields[3].GetCppString();
+        LocaleConstant locale = GetLocaleByName(localeString);
+
+        int idx = GetOrNewIndexForLocale(locale);
+        if (idx >= 0)
+        {
+            if (bct.maleText.size() <= size_t(idx))
+            {
+                bct.maleText.resize(idx + 1);
+                bct.femaleText.resize(idx + 1);
+            }
+
+            bct.maleText[idx] = maleText;
+            bct.femaleText[idx] = femaleText;
+        }
+
+        ++count;
+    } while (result->NextRow());
+
+    sLog.outString(">> Loaded %u texts from %s", count, "broadcast_text_locale");
+    sLog.outString();
+}
+
 void ObjectMgr::DeleteCreatureData(uint32 guid)
 {
     // remove mapid*cellid -> guid_set map
@@ -7218,7 +7382,7 @@ PetNameInvalidReason ObjectMgr::CheckPetName(const std::string& name)
 
 int ObjectMgr::GetIndexForLocale(LocaleConstant loc)
 {
-    if (loc == LOCALE_enUS)
+    if (loc == DEFAULT_LOCALE)
         return -1;
 
     for (size_t i = 0; i < m_LocalForIndex.size(); ++i)
@@ -7231,14 +7395,14 @@ int ObjectMgr::GetIndexForLocale(LocaleConstant loc)
 LocaleConstant ObjectMgr::GetLocaleForIndex(int i)
 {
     if (i < 0 || i >= (int32)m_LocalForIndex.size())
-        return LOCALE_enUS;
+        return DEFAULT_LOCALE;
 
     return m_LocalForIndex[i];
 }
 
 int ObjectMgr::GetOrNewIndexForLocale(LocaleConstant loc)
 {
-    if (loc == LOCALE_enUS)
+    if (loc == DEFAULT_LOCALE)
         return -1;
 
     for (size_t i = 0; i < m_LocalForIndex.size(); ++i)
@@ -7404,7 +7568,7 @@ bool ObjectMgr::LoadMangosStrings(DatabaseType& db, char const* table, int32 min
     sLog.outString("Loading texts from %s%s", table, extra_content ? ", with additional data" : "");
 
     QueryResult* result = db.PQuery("SELECT entry,content_default,content_loc1,content_loc2,content_loc3,content_loc4,content_loc5,content_loc6,content_loc7,content_loc8 %s FROM %s",
-                                    extra_content ? ",sound,type,language,emote" : "", table);
+                                    extra_content ? ",sound,type,language,emote,broadcast_text_id" : "", table);
 
     if (!result)
     {
@@ -7480,6 +7644,7 @@ bool ObjectMgr::LoadMangosStrings(DatabaseType& db, char const* table, int32 min
             data.Type        = fields[11].GetUInt32();
             data.LanguageId  = Language(fields[12].GetUInt32());
             data.Emote       = fields[13].GetUInt32();
+            uint32 broadcastTextId = fields[14].GetUInt32();
 
             if (data.SoundId && !sSoundEntriesStore.LookupEntry(data.SoundId))
             {
@@ -7503,6 +7668,14 @@ bool ObjectMgr::LoadMangosStrings(DatabaseType& db, char const* table, int32 min
             {
                 _DoStringError(entry, "Entry %i in table `%s` has Emote %u but emote does not exist.", entry, table, data.Emote);
                 data.Emote = EMOTE_ONESHOT_NONE;
+            }
+
+            if (broadcastTextId)
+            {
+                if (BroadcastText const* bct = GetBroadcastText(broadcastTextId))
+                    data.broadcastText = bct;
+                else
+                    _DoStringError(entry, "Entry %i in table `%s` has BroadcastTextID %u but broadcast_text does not exist.", entry, table, broadcastTextId);
             }
         }
     }
@@ -9018,8 +9191,8 @@ void ObjectMgr::LoadGossipMenuItems(std::set<uint32>& gossipScriptSet)
     m_mGossipMenuItemsMap.clear();
 
     QueryResult* result = WorldDatabase.Query(
-                              "SELECT menu_id, id, option_icon, option_text, option_id, npc_option_npcflag, "
-                              "action_menu_id, action_poi_id, action_script_id, box_coded, box_money, box_text, "
+                              "SELECT menu_id, id, option_icon, option_text, option_broadcast_text, option_id, npc_option_npcflag, "
+                              "action_menu_id, action_poi_id, action_script_id, box_coded, box_money, box_text, box_broadcast_text, "
                               "condition_id "
                               "FROM gossip_menu_option ORDER BY menu_id, id");
 
@@ -9076,16 +9249,18 @@ void ObjectMgr::LoadGossipMenuItems(std::set<uint32>& gossipScriptSet)
         gMenuItem.id                    = fields[1].GetUInt32();
         gMenuItem.option_icon           = fields[2].GetUInt8();
         gMenuItem.option_text           = fields[3].GetCppString();
-        gMenuItem.option_id             = fields[4].GetUInt32();
-        gMenuItem.npc_option_npcflag    = fields[5].GetUInt32();
-        gMenuItem.action_menu_id        = fields[6].GetInt32();
-        gMenuItem.action_poi_id         = fields[7].GetUInt32();
-        gMenuItem.action_script_id      = fields[8].GetUInt32();
-        gMenuItem.box_coded             = fields[9].GetUInt8() != 0;
-        // gMenuItem.box_money             = fields[10].GetUInt32();
-        gMenuItem.box_text              = fields[11].GetCppString();
+        gMenuItem.option_broadcast_text = fields[4].GetUInt32();
+        gMenuItem.option_id             = fields[5].GetUInt32();
+        gMenuItem.npc_option_npcflag    = fields[6].GetUInt32();
+        gMenuItem.action_menu_id        = fields[7].GetInt32();
+        gMenuItem.action_poi_id         = fields[8].GetUInt32();
+        gMenuItem.action_script_id      = fields[9].GetUInt32();
+        gMenuItem.box_coded             = fields[10].GetUInt8() != 0;
+        // gMenuItem.box_money             = fields[11].GetUInt32();
+        gMenuItem.box_text              = fields[12].GetCppString();
+        gMenuItem.box_broadcast_text    = fields[13].GetUInt32();
 
-        gMenuItem.conditionId           = fields[12].GetUInt16();
+        gMenuItem.conditionId           = fields[14].GetUInt16();
 
         if (gMenuItem.menu_id)                              // == 0 id is special and not have menu_id data
         {

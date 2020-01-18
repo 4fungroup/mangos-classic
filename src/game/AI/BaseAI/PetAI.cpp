@@ -76,9 +76,10 @@ void PetAI::MoveInLineOfSight(Unit* who)
 
     if (HasReactState(REACT_AGGRESSIVE)
             && !(pet && pet->GetModeFlags() & PET_MODE_DISABLE_ACTIONS)
+            && !(who->GetTypeId() == TYPEID_UNIT && static_cast<Creature*>(who)->IsCivilian())
             && m_creature->CanAttackOnSight(who) && who->isInAccessablePlaceFor(m_unit)
             && m_unit->IsWithinDistInMap(who, m_unit->GetAttackDistance(who))
-            && m_unit->GetDistanceZ(who) <= CREATURE_Z_ATTACK_RANGE
+            && m_unit->GetDistanceZ(who) <= CREATURE_Z_ATTACK_RANGE_MELEE
             && m_unit->IsWithinLOSInMap(who))
     {
         AttackStart(who);
@@ -96,7 +97,7 @@ void PetAI::AttackStart(Unit* who)
         return;
 
     // Do not start attack if target is moving home
-    if (who->IsEvadingHome())
+    if (who->GetCombatManager().IsEvadingHome())
         return;
 
     if (m_unit->Attack(who, m_meleeEnabled))
@@ -113,6 +114,7 @@ void PetAI::AttackStart(Unit* who)
 
 void PetAI::EnterEvadeMode()
 {
+    m_unit->CombatStop();
 }
 
 void PetAI::UpdateAI(const uint32 diff)
@@ -135,7 +137,7 @@ void PetAI::UpdateAI(const uint32 diff)
     Unit* victim = (pet && pet->GetModeFlags() & PET_MODE_DISABLE_ACTIONS) ? nullptr : m_unit->getVictim();
 
     // Do not continue attacking if victim is moving home
-    if (victim && victim->IsEvadingHome())
+    if (victim && victim->GetCombatManager().IsEvadingHome())
         victim = nullptr;
 
     // Stop auto attack and chase if victim was dropped
@@ -185,7 +187,7 @@ void PetAI::UpdateAI(const uint32 diff)
             {
                 uint32 spellId = charminfo->GetSpellOpener();
                 SpellEntry const* spellInfo = sSpellTemplate.LookupEntry<SpellEntry>(spellId);
-                Spell* spell = new Spell(m_unit, spellInfo, false);
+                Spell* spell = new Spell(m_unit, spellInfo, TRIGGERED_NONE);
 
                 // Push back stored spell
                 targetSpellStore.push_back(TargetSpellList::value_type(victim, spell));
@@ -227,17 +229,13 @@ void PetAI::UpdateAI(const uint32 diff)
                         // allow only spell not on cooldown
                         if (cooldown != 0 && duration < cooldown)
                             continue;
-
-                        // not allow instant kill auto casts as full health cost
-                        if (IsSpellHaveEffect(spellInfo, SPELL_EFFECT_INSTAKILL))
-                            continue;
                     }
                 }
                 // just ignore non-combat spells
                 else if (IsNonCombatSpell(spellInfo))
                     continue;
 
-                Spell* spell = new Spell(m_unit, spellInfo, false);
+                Spell* spell = new Spell(m_unit, spellInfo, TRIGGERED_NONE);
 
                 if (inCombat && spell->CanAutoCast(victim))
                 {
@@ -385,8 +383,10 @@ void PetAI::UpdateAllies()
         return;
 
     m_AllySet.clear();
-    m_AllySet.insert(m_unit->GetObjectGuid());
-    if (group)                                             // add group
+    m_AllySet.insert(m_unit->GetObjectGuid());  // add self
+    m_AllySet.insert(owner->GetObjectGuid());   // add owner
+
+    if (group)                                  // add group
     {
         for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
         {
@@ -400,8 +400,6 @@ void PetAI::UpdateAllies()
             m_AllySet.insert(target->GetObjectGuid());
         }
     }
-    else                                                    // remove group
-        m_AllySet.insert(owner->GetObjectGuid());
 }
 
 void PetAI::AttackedBy(Unit* attacker)
